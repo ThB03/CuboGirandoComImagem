@@ -68,7 +68,6 @@ def warp_with_homography(src_img, homography_matrix, output_size):
     # Create a grid of destination pixel coordinates
     oy, ox = np.meshgrid(np.arange(height), np.arange(width), indexing='ij')
     
-    # Flatten the coordinates for easier manipulation
     dest_coords = np.vstack((ox.ravel(), oy.ravel(), np.ones(ox.size)))
     
     # Apply the homography transformation to all pixels
@@ -77,7 +76,6 @@ def warp_with_homography(src_img, homography_matrix, output_size):
     epsilon = 10**-4
     w = np.where(np.abs(w) < epsilon, epsilon, w)  # Set small w values to epsilon
 
-    # Convert from homogeneous coordinates
     tx = (xw / w).astype(int)
     ty = (yw / w).astype(int)
     
@@ -101,46 +99,42 @@ def render_cube(textures, angle_x, angle_y, angle_z):
     R = get_rotation_matrix(np.radians(angle_x), np.radians(angle_y), np.radians(angle_z))
     rotated_vertices = np.dot(cube_vertices, R.T)
     
-    # Compute face depth for sorting
     face_depths = []
     for face in cube_faces:
         avg_depth = np.mean(rotated_vertices[face, 2])  # Average Z-depth of face
         face_depths.append((avg_depth, face))
 
-    # Sort faces from back to front (painter's algorithm)
     face_depths.sort(reverse=True, key=lambda x: x[0])
     
-    # Project 3D points to 2D
+    # Project 3D to 2D
     projected_vertices = project_3d_to_2d(rotated_vertices)
 
-    # Create a blank image
     img = np.zeros((500, 500, 3), dtype=np.uint8)
 
-    # Draw and texture each face in sorted order
+    # Draw and texture each face
     for _, face in face_depths:
         face_2d = projected_vertices[face]
 
-        # Compute homography
         H, _ = cv2.findHomography(texture_corners, face_2d)
 
         # Get the corresponding texture for this face
         face_index = cube_faces.index(face)
         texture = textures[face_index]
 
-        # Apply the homography using the custom function
+        # Apply the homography
         warped_texture = warp_with_homography(texture, np.linalg.inv(H), (500, 500))
         
-        # Create mask for the face
+        # Create mask
         mask = (warped_texture != 0).any(axis=2).astype(np.uint8) * 255
 
         mask_3d = np.stack([mask] * img.shape[2], axis=2)
 
-        # Apply the texture to the image using the mask
+        # Apply the texture according to mask
         img = np.where(mask_3d > 0, warped_texture, img)
 
     return img
 
-# Load 6 texture images, one for each face of the cube
+# Load textures
 textures = [
     cv2.imread("th.jpg"),
     cv2.imread("bulcao.jpg"),
@@ -156,17 +150,14 @@ textures = [cv2.resize(texture, (200, 200)) for texture in textures]
 # Animation loop
 angle_x, angle_y, angle_z = 0, 0, 0
 while True:
-    # Update rotation angles
     angle_x += 2
     angle_y += 3
     angle_z += 1
 
-    # Render the cube
     frame = render_cube(textures, angle_x, angle_y, angle_z)
 
-    # Check edges for incorrect projections
     if np.any(frame[0, :] != 0) or np.any(frame[-1, :] != 0) or np.any(frame[:, 0] != 0) or np.any(frame[:, -1] != 0):
-        continue  # Discard the frame and move to the next iteration
+        continue
     
     # Show the animation
     cv2.imshow("Spinning Cube", frame)
